@@ -1,0 +1,6 @@
+{
+  "name": "Expense & Budget Tracker",
+  "description": "Complete personal finance tool with expense tracking, income tracking, monthly budget planning, savings goals, category analytics, and financial reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
