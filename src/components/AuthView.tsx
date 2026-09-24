@@ -47,8 +47,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [activeMode, setActiveMode] = useState<'login' | 'register'>('login');
   
   // Login form state
-  const [loginIdentifier, setLoginIdentifier] = useState(defaultEmail || (users[0]?.email || 'iswaryai078@gmail.com'));
-  const [loginPassword, setLoginPassword] = useState('Password@123');
+  const [loginIdentifier, setLoginIdentifier] = useState(defaultEmail || '');
+  const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
@@ -432,50 +432,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 <span>{isSubmitting ? 'Authenticating...' : 'Sign In to Workspace'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
-
-              {/* Quick Login Accounts */}
-              <div className="pt-3 border-t border-slate-100">
-                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-2">
-                  <span>Quick Fill Available Accounts:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setResetEmail(loginIdentifier || 'iswaryai078@gmail.com');
-                      setIsResetModalOpen(true);
-                    }}
-                    className="text-amber-600 hover:text-amber-700 font-bold"
-                  >
-                    Reset Password
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginIdentifier('iswaryai078@gmail.com');
-                      setLoginPassword('Password@123');
-                    }}
-                    className="p-2 rounded-xl border border-slate-200 hover:border-amber-400 bg-slate-50 hover:bg-amber-50/50 text-left transition cursor-pointer text-xs group"
-                  >
-                    <div className="font-bold text-slate-800 group-hover:text-amber-900 truncate">Iswarya I</div>
-                    <div className="text-[10px] text-slate-500 truncate">iswaryai078@gmail.com</div>
-                    <div className="text-[10px] font-mono text-amber-700 mt-0.5">Password@123</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginIdentifier('ramyaselva048@gmail.com');
-                      setLoginPassword('Password@123');
-                    }}
-                    className="p-2 rounded-xl border border-slate-200 hover:border-amber-400 bg-slate-50 hover:bg-amber-50/50 text-left transition cursor-pointer text-xs group"
-                  >
-                    <div className="font-bold text-slate-800 group-hover:text-amber-900 truncate">Ramya Selva</div>
-                    <div className="text-[10px] text-slate-500 truncate">ramyaselva048@gmail.com</div>
-                    <div className="text-[10px] font-mono text-amber-700 mt-0.5">Password@123</div>
-                  </button>
-                </div>
-              </div>
             </form>
           )}
 
