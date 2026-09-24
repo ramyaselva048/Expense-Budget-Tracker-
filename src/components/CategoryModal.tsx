@@ -6,7 +6,8 @@ import { AVAILABLE_ICONS, CategoryIcon } from './CategoryIcon';
 interface CategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddCategory: (category: Omit<Category, 'id' | 'created_at'>) => void;
+  onSaveCategory: (category: Omit<Category, 'id' | 'created_at'>, id?: number) => void;
+  initialCategory?: Category | null;
 }
 
 const COLOR_PALETTE = [
@@ -27,12 +28,27 @@ const COLOR_PALETTE = [
 export const CategoryModal: React.FC<CategoryModalProps> = ({
   isOpen,
   onClose,
-  onAddCategory,
+  onSaveCategory,
+  initialCategory,
 }) => {
   const [name, setName] = useState('');
   const [type, setType] = useState<CategoryType>('expense');
   const [icon, setIcon] = useState('Tag');
   const [color, setColor] = useState('#3B82F6');
+
+  useEffect(() => {
+    if (initialCategory) {
+      setName(initialCategory.name);
+      setType(initialCategory.type);
+      setIcon(initialCategory.icon);
+      setColor(initialCategory.color);
+    } else {
+      setName('');
+      setType('expense');
+      setIcon('Tag');
+      setColor('#3B82F6');
+    }
+  }, [initialCategory, isOpen]);
 
   // Close on Escape key
   useEffect(() => {
@@ -51,12 +67,15 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
     e.preventDefault();
     if (!name.trim()) return;
 
-    onAddCategory({
-      name: name.trim(),
-      type,
-      icon,
-      color,
-    });
+    onSaveCategory(
+      {
+        name: name.trim(),
+        type,
+        icon,
+        color,
+      },
+      initialCategory?.id
+    );
     setName('');
     onClose();
   };
@@ -74,8 +93,12 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
       >
         <div className="px-5 sm:px-6 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
           <div>
-            <h3 className="text-base sm:text-lg font-bold text-slate-900">New Category</h3>
-            <p className="text-xs text-slate-500">Create a personalized tracking tag</p>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">
+              {initialCategory ? 'Edit Category' : 'New Category'}
+            </h3>
+            <p className="text-xs text-slate-500">
+              {initialCategory ? 'Modify category name, icon, and styling' : 'Create a personalized tracking tag'}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -181,7 +204,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
             form="category-form"
             className="px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition cursor-pointer"
           >
-            Add Category
+            {initialCategory ? 'Save Changes' : 'Add Category'}
           </button>
         </div>
       </div>

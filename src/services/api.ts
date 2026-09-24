@@ -73,8 +73,9 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(expense),
     });
-    if (!res.ok) throw new Error('Failed to create expense');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to create expense');
+    return data;
   },
 
   async updateExpense(id: number, expense: Partial<Expense>): Promise<{ success: boolean }> {
@@ -83,16 +84,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(expense),
     });
-    if (!res.ok) throw new Error('Failed to update expense');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to update expense');
+    return data;
   },
 
   async deleteExpense(id: number): Promise<{ success: boolean }> {
     const res = await fetch(`/api/expenses/${id}`, {
       method: 'DELETE',
     });
-    if (!res.ok) throw new Error('Failed to delete expense');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to delete expense');
+    return data;
   },
 
   async createIncome(income: Omit<Income, 'id' | 'created_at' | 'updated_at'>): Promise<{ success: boolean; income: Income }> {
@@ -101,8 +104,9 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(income),
     });
-    if (!res.ok) throw new Error('Failed to create income');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to create income');
+    return data;
   },
 
   async updateIncome(id: number, income: Partial<Income>): Promise<{ success: boolean }> {
@@ -111,16 +115,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(income),
     });
-    if (!res.ok) throw new Error('Failed to update income');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to update income');
+    return data;
   },
 
   async deleteIncome(id: number): Promise<{ success: boolean }> {
     const res = await fetch(`/api/incomes/${id}`, {
       method: 'DELETE',
     });
-    if (!res.ok) throw new Error('Failed to delete income');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to delete income');
+    return data;
   },
 
   async createBudget(budget: Omit<Budget, 'id' | 'created_at' | 'updated_at'>): Promise<{ success: boolean; budget: Budget }> {
@@ -129,8 +135,9 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(budget),
     });
-    if (!res.ok) throw new Error('Failed to create budget');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to create budget');
+    return data;
   },
 
   async updateBudget(id: number, budget: Partial<Budget>): Promise<{ success: boolean }> {
@@ -139,16 +146,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(budget),
     });
-    if (!res.ok) throw new Error('Failed to update budget');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to update budget');
+    return data;
   },
 
   async deleteBudget(id: number): Promise<{ success: boolean }> {
     const res = await fetch(`/api/budgets/${id}`, {
       method: 'DELETE',
     });
-    if (!res.ok) throw new Error('Failed to delete budget');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to delete budget');
+    return data;
   },
 
   async createGoal(goal: Omit<SavingsGoal, 'id' | 'created_at' | 'updated_at'>): Promise<{ success: boolean; goal: SavingsGoal }> {
@@ -157,8 +166,9 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(goal),
     });
-    if (!res.ok) throw new Error('Failed to create savings goal');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to create savings goal');
+    return data;
   },
 
   async updateGoal(id: number, goal: Partial<SavingsGoal>): Promise<{ success: boolean }> {
@@ -167,8 +177,9 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(goal),
     });
-    if (!res.ok) throw new Error('Failed to update goal');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to update goal');
+    return data;
   },
 
   async addGoalFunds(id: number, amount: number): Promise<{ success: boolean; saved_amount: number; is_completed: boolean }> {
@@ -177,16 +188,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount }),
     });
-    if (!res.ok) throw new Error('Failed to fund goal');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to fund goal');
+    return data;
   },
 
   async deleteGoal(id: number): Promise<{ success: boolean }> {
     const res = await fetch(`/api/goals/${id}`, {
       method: 'DELETE',
     });
-    if (!res.ok) throw new Error('Failed to delete goal');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to delete goal');
+    return data;
   },
 
   async createCategory(category: Omit<Category, 'id' | 'created_at'>): Promise<{ success: boolean; category: Category }> {
@@ -195,16 +208,29 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(category),
     });
-    if (!res.ok) throw new Error('Failed to create category');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to create category');
+    return data;
+  },
+
+  async updateCategory(id: number, category: Partial<Category>): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/categories/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(category),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to update category');
+    return data;
   },
 
   async deleteCategory(id: number): Promise<{ success: boolean }> {
     const res = await fetch(`/api/categories/${id}`, {
       method: 'DELETE',
     });
-    if (!res.ok) throw new Error('Failed to delete category');
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to delete category');
+    return data;
   },
 
   async updateUserCurrency(userId: number, currency: CurrencyCode): Promise<{ success: boolean }> {

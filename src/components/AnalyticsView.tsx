@@ -18,7 +18,9 @@ import {
   Tag, 
   ArrowUpRight, 
   Layers, 
-  Palette 
+  Palette,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { Category, Expense, Income, User } from '../types';
 import { formatCurrency } from '../utils/formatters';
@@ -30,6 +32,8 @@ interface AnalyticsViewProps {
   expenses: Expense[];
   incomes: Income[];
   onOpenNewCategory: () => void;
+  onEditCategory?: (category: Category) => void;
+  onDeleteCategory?: (id: number) => void;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
@@ -38,6 +42,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   expenses,
   incomes,
   onOpenNewCategory,
+  onEditCategory,
+  onDeleteCategory,
 }) => {
   const [timeRange, setTimeRange] = useState<'all' | '30days' | '90days'>('all');
 
@@ -326,14 +332,39 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           {categories.map((cat) => (
             <div
               key={cat.id}
-              className="p-3 rounded-xl border border-slate-100 bg-slate-50/60 flex items-center gap-2.5"
+              className="p-3 rounded-xl border border-slate-100 bg-slate-50/60 flex items-center justify-between gap-2 group hover:border-slate-200 transition"
             >
-              <CategoryIcon iconName={cat.icon} color={cat.color} className="w-4 h-4" />
-              <div className="overflow-hidden">
-                <p className="text-xs font-bold text-slate-800 truncate">{cat.name}</p>
-                <span className={`text-[10px] font-semibold uppercase ${cat.type === 'expense' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                  {cat.type}
-                </span>
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <CategoryIcon iconName={cat.icon} color={cat.color} className="w-4 h-4 shrink-0" />
+                <div className="overflow-hidden">
+                  <p className="text-xs font-bold text-slate-800 truncate">{cat.name}</p>
+                  <span className={`text-[10px] font-semibold uppercase ${cat.type === 'expense' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {cat.type}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 shrink-0">
+                {onEditCategory && (
+                  <button
+                    type="button"
+                    onClick={() => onEditCategory(cat)}
+                    className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition cursor-pointer"
+                    title={`Edit ${cat.name}`}
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {onDeleteCategory && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteCategory(cat.id)}
+                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
+                    title={`Delete ${cat.name}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           ))}

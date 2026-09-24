@@ -225,20 +225,24 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <button
+                      type="button"
                       onClick={() => onEditBudget(item.budget)}
-                      className="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-white transition cursor-pointer"
-                      title="Edit Limit"
+                      className="px-2 py-1 text-xs font-semibold rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/60 transition flex items-center gap-1 cursor-pointer"
+                      title="Edit Budget Limit"
                     >
-                      <Edit3 className="w-3.5 h-3.5" />
+                      <Edit3 className="w-3 h-3" />
+                      <span>Edit</span>
                     </button>
                     <button
+                      type="button"
                       onClick={() => onDeleteBudget(item.budget.id)}
-                      className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-white transition cursor-pointer"
+                      className="px-2 py-1 text-xs font-semibold rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/60 transition flex items-center gap-1 cursor-pointer"
                       title="Delete Budget"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
                     </button>
                   </div>
                 </div>

@@ -37,6 +37,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [notes, setNotes] = useState<string>('');
 
   useEffect(() => {
+    if (!isOpen) return;
+
     if (initialExpense) {
       setTxType('expense');
       setAmount(initialExpense.amount.toString());
@@ -67,7 +69,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setRecurrencePeriod('monthly');
       setNotes('');
     }
-  }, [initialExpense, initialIncome, initialType, isOpen, categories]);
+  }, [initialExpense, initialIncome, initialType, isOpen]);
 
   // Close on Escape key
   useEffect(() => {

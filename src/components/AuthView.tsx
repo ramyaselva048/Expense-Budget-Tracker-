@@ -27,6 +27,7 @@ import {
   hashPassword,
   generateSecureId 
 } from '../utils/security';
+import { api } from '../services/api';
 
 interface AuthViewProps {
   users: User[];
@@ -41,13 +42,13 @@ export const AuthView: React.FC<AuthViewProps> = ({
   onLogin,
   onRegister,
   onUpdateUserPassword,
-  defaultEmail = 'ramyaselva048@gmail.com',
+  defaultEmail = '',
 }) => {
   const [activeMode, setActiveMode] = useState<'login' | 'register'>('login');
   
   // Login form state
-  const [loginIdentifier, setLoginIdentifier] = useState(defaultEmail);
-  const [loginPassword, setLoginPassword] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState(defaultEmail || (users[0]?.email || 'iswaryai078@gmail.com'));
+  const [loginPassword, setLoginPassword] = useState('Password@123');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
@@ -105,7 +106,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
     setSuccessMsg(null);
     setIsSubmitting(true);
 
-    const trimmed = sanitizeInput(loginIdentifier).toLowerCase();
+    const trimmed = sanitizeInput(loginIdentifier).trim();
     const cleanPassword = loginPassword;
 
     if (!trimmed) {
@@ -119,47 +120,50 @@ export const AuthView: React.FC<AuthViewProps> = ({
       return;
     }
 
-    // Match by email or username
-    const foundUser = users.find(
-      (u) =>
-        u.email.toLowerCase() === trimmed ||
-        u.username.toLowerCase() === trimmed
-    );
+    try {
+      // 1. Direct authoritative authentication with TiDB Cloud MySQL database
+      const result = await api.login(trimmed, cleanPassword);
+      if (result && result.success && result.user) {
+        setFailedAttempts(0);
+        setSuccessMsg(`Welcome back, ${result.user.first_name || result.user.username}! Redirecting to workspace...`);
+        setTimeout(() => {
+          onLogin(result.user);
+        }, 300);
+        return;
+      }
+      throw new Error(result.message || 'Login failed');
+    } catch (apiErr: any) {
+      // 2. Check local fallback users if available
+      const foundUser = users.find(
+        (u) =>
+          u.email.toLowerCase() === trimmed.toLowerCase() ||
+          u.username.toLowerCase() === trimmed.toLowerCase()
+      );
 
-    if (!foundUser) {
+      if (foundUser && foundUser.password) {
+        const isValid = await verifyPassword(cleanPassword, foundUser.password);
+        if (isValid) {
+          setFailedAttempts(0);
+          setSuccessMsg(`Welcome back, ${foundUser.first_name}! Redirecting...`);
+          setTimeout(() => {
+            onLogin(foundUser);
+          }, 300);
+          return;
+        }
+      }
+
       const attempts = failedAttempts + 1;
       setFailedAttempts(attempts);
       if (attempts >= 5) {
         setLockoutSeconds(30);
         setErrorMsg('Too many failed attempts. Security cooldown active for 30 seconds.');
       } else {
-        setErrorMsg(`Invalid credentials. (Attempt ${attempts} of 5)`);
+        const message = apiErr.message || 'Invalid email or password. Please check your credentials or reset password.';
+        setErrorMsg(`${message} (Attempt ${attempts} of 5)`);
       }
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    // Secure password verification
-    const isValid = await verifyPassword(cleanPassword, foundUser.password || '');
-    if (!isValid) {
-      const attempts = failedAttempts + 1;
-      setFailedAttempts(attempts);
-      if (attempts >= 5) {
-        setLockoutSeconds(30);
-        setErrorMsg('Too many failed attempts. Security cooldown active for 30 seconds.');
-      } else {
-        setErrorMsg(`Invalid password. Please check your credentials. (Attempt ${attempts} of 5)`);
-      }
-      setIsSubmitting(false);
-      return;
-    }
-
-    // Reset failed attempts on success
-    setFailedAttempts(0);
-    setSuccessMsg('Authentication successful. Redirecting to workspace...');
-    setTimeout(() => {
-      onLogin(foundUser);
-    }, 400);
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -167,10 +171,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const cleanFirstName = sanitizeInput(regFirstName);
-    const cleanLastName = sanitizeInput(regLastName);
-    const cleanUsername = sanitizeInput(regUsername).toLowerCase().replace(/[^a-z0-9_]/g, '');
-    const cleanEmail = sanitizeInput(regEmail).toLowerCase();
+    const cleanFirstName = sanitizeInput(regFirstName).trim();
+    const cleanLastName = sanitizeInput(regLastName).trim();
+    const cleanUsername = sanitizeInput(regUsername).toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+    const cleanEmail = sanitizeInput(regEmail).toLowerCase().trim();
 
     if (!cleanFirstName || !cleanLastName) {
       setErrorMsg('Please enter both your first and last name.');
@@ -184,8 +188,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
       setErrorMsg('Please provide a valid email address (e.g. name@domain.com).');
       return;
     }
-    if (!passwordStrength.isValid) {
-      setErrorMsg('Password must be at least 6 characters. 8+ characters recommended.');
+    if (regPassword.length < 6) {
+      setErrorMsg('Password must be at least 6 characters.');
       return;
     }
     if (regPassword !== regConfirmPassword) {
@@ -193,38 +197,31 @@ export const AuthView: React.FC<AuthViewProps> = ({
       return;
     }
 
-    // Check unique email and username
-    const duplicate = users.some(
-      (u) =>
-        u.email.toLowerCase() === cleanEmail ||
-        u.username.toLowerCase() === cleanUsername
-    );
-
-    if (duplicate) {
-      setErrorMsg('An account with this email address or username already exists. Please log in.');
-      return;
-    }
-
     setIsSubmitting(true);
-    // Hash password before persistent storage
-    const hashedPassword = await hashPassword(regPassword);
-    const newId = generateSecureId();
+    try {
+      // Direct registration into TiDB Cloud MySQL database
+      const res = await api.register({
+        first_name: cleanFirstName,
+        last_name: cleanLastName,
+        username: cleanUsername,
+        email: cleanEmail,
+        currency: regCurrency,
+        password: regPassword,
+      });
 
-    const newUser: User = {
-      id: newId,
-      first_name: cleanFirstName,
-      last_name: cleanLastName,
-      username: cleanUsername,
-      email: cleanEmail,
-      currency: regCurrency,
-      password: hashedPassword,
-      created_at: new Date().toISOString(),
-    };
-
-    setSuccessMsg('Account registered securely! Initializing dashboard...');
-    setTimeout(() => {
-      onRegister(newUser);
-    }, 500);
+      if (res && res.success && res.user) {
+        setSuccessMsg('Account created successfully in TiDB Cloud! Logging in...');
+        setTimeout(() => {
+          onRegister(res.user);
+        }, 400);
+        return;
+      }
+      throw new Error(res.message || 'Registration failed');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Registration failed. An account with this email may already exist.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePasswordReset = async (e: React.FormEvent) => {
@@ -232,20 +229,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
     setResetError(null);
     setResetSuccess(null);
 
-    const cleanEmail = sanitizeInput(resetEmail).toLowerCase();
-    if (!validateEmail(cleanEmail)) {
-      setResetError('Please enter a valid registered email address.');
+    const cleanEmail = sanitizeInput(resetEmail).toLowerCase().trim();
+    if (!cleanEmail) {
+      setResetError('Please enter your registered email address.');
       return;
     }
 
-    const targetUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
-    if (!targetUser) {
-      setResetError('No account found associated with this email address.');
-      return;
-    }
-
-    if (resetNewPassword.length < 8) {
-      setResetError('New password must be at least 8 characters long.');
+    if (resetNewPassword.length < 6) {
+      setResetError('New password must be at least 6 characters long.');
       return;
     }
 
@@ -254,23 +245,25 @@ export const AuthView: React.FC<AuthViewProps> = ({
       return;
     }
 
-    const newHash = await hashPassword(resetNewPassword);
-    if (onUpdateUserPassword) {
-      onUpdateUserPassword(cleanEmail, newHash);
-    } else {
-      targetUser.password = newHash;
+    try {
+      const res = await api.resetPassword(cleanEmail, resetNewPassword);
+      if (onUpdateUserPassword) {
+        onUpdateUserPassword(cleanEmail, resetNewPassword);
+      }
+      setResetSuccess(res.message || 'Password updated in TiDB Cloud database! You can now log in.');
+      setTimeout(() => {
+        setIsResetModalOpen(false);
+        setResetSuccess(null);
+        setResetEmail('');
+        setResetNewPassword('');
+        setResetConfirmPassword('');
+        setActiveMode('login');
+        setLoginIdentifier(cleanEmail);
+        setLoginPassword(resetNewPassword);
+      }, 1400);
+    } catch (err: any) {
+      setResetError(err.message || 'No account found with this email or username.');
     }
-
-    setResetSuccess('Password updated successfully! You can now sign in with your new password.');
-    setTimeout(() => {
-      setIsResetModalOpen(false);
-      setResetSuccess(null);
-      setResetEmail('');
-      setResetNewPassword('');
-      setResetConfirmPassword('');
-      setActiveMode('login');
-      setLoginIdentifier(cleanEmail);
-    }, 1500);
   };
 
   return (
@@ -439,6 +432,50 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 <span>{isSubmitting ? 'Authenticating...' : 'Sign In to Workspace'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              {/* Quick Login Accounts */}
+              <div className="pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-2">
+                  <span>Quick Fill Available Accounts:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetEmail(loginIdentifier || 'iswaryai078@gmail.com');
+                      setIsResetModalOpen(true);
+                    }}
+                    className="text-amber-600 hover:text-amber-700 font-bold"
+                  >
+                    Reset Password
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginIdentifier('iswaryai078@gmail.com');
+                      setLoginPassword('Password@123');
+                    }}
+                    className="p-2 rounded-xl border border-slate-200 hover:border-amber-400 bg-slate-50 hover:bg-amber-50/50 text-left transition cursor-pointer text-xs group"
+                  >
+                    <div className="font-bold text-slate-800 group-hover:text-amber-900 truncate">Iswarya I</div>
+                    <div className="text-[10px] text-slate-500 truncate">iswaryai078@gmail.com</div>
+                    <div className="text-[10px] font-mono text-amber-700 mt-0.5">Password@123</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginIdentifier('ramyaselva048@gmail.com');
+                      setLoginPassword('Password@123');
+                    }}
+                    className="p-2 rounded-xl border border-slate-200 hover:border-amber-400 bg-slate-50 hover:bg-amber-50/50 text-left transition cursor-pointer text-xs group"
+                  >
+                    <div className="font-bold text-slate-800 group-hover:text-amber-900 truncate">Ramya Selva</div>
+                    <div className="text-[10px] text-slate-500 truncate">ramyaselva048@gmail.com</div>
+                    <div className="text-[10px] font-mono text-amber-700 mt-0.5">Password@123</div>
+                  </button>
+                </div>
+              </div>
             </form>
           )}
 

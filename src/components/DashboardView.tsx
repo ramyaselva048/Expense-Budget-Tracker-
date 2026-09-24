@@ -10,7 +10,9 @@ import {
   Plus, 
   Receipt, 
   Clock, 
-  Sparkles 
+  Sparkles,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { Budget, Category, Expense, Income, SavingsGoal, User } from '../types';
 import { formatCurrency, formatDate, formatMonthYear } from '../utils/formatters';
@@ -462,23 +464,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <span className="font-extrabold text-sm text-rose-600">
                       -{formatCurrency(exp.amount, user.currency)}
                     </span>
                     <button
+                      type="button"
                       onClick={() => onEditExpense(exp)}
-                      className="text-xs text-slate-500 hover:text-amber-600 p-1 hover:bg-slate-100 rounded cursor-pointer"
-                      title="Edit"
+                      className="px-2 py-1 text-xs font-semibold rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/60 transition flex items-center gap-1 cursor-pointer"
+                      title="Edit expense"
                     >
-                      Edit
+                      <Edit3 className="w-3 h-3" />
+                      <span>Edit</span>
                     </button>
                     <button
+                      type="button"
                       onClick={() => onDeleteExpense(exp.id)}
-                      className="text-xs text-slate-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded cursor-pointer"
-                      title="Delete"
+                      className="px-2 py-1 text-xs font-semibold rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/60 transition flex items-center gap-1 cursor-pointer"
+                      title="Delete expense"
                     >
-                      ✕
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
                     </button>
                   </div>
                 </div>
