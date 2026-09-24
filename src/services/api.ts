@@ -243,6 +243,28 @@ export const api = {
     return res.json();
   },
 
+  async updateUserProfile(userData: Partial<User> & { id: number }): Promise<{ success: boolean; user: User; message?: string }> {
+    const res = await fetch('/api/user/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'Failed to update profile');
+    return data;
+  },
+
+  async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, currentPassword, newPassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'Failed to change password');
+    return data;
+  },
+
   async resetData(): Promise<{ success: boolean }> {
     const res = await fetch('/api/reset-data', {
       method: 'POST',

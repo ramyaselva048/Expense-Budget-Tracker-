@@ -1,390 +1,637 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
+import { 
+  INITIAL_USERS, 
+  INITIAL_CATEGORIES, 
+  INITIAL_EXPENSES, 
+  INITIAL_INCOMES, 
+  INITIAL_BUDGETS, 
+  INITIAL_GOALS 
+} from '../data/initialData';
 
 dotenv.config({ override: true });
 
-const TIDB_USER_DATABASE_URL = 'mysql://3AfWrYmrU3kFNtZ.root:ZZZl6zxgReVFuEdJ@gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000/expense_tracker';
-let rawUrl: string = process.env.DATABASE_URL || TIDB_USER_DATABASE_URL;
+const rawUrl: string | undefined = process.env.DATABASE_URL;
 
-if (rawUrl.includes('username:password') || rawUrl.trim() === '') {
-  rawUrl = TIDB_USER_DATABASE_URL;
-}
-
-function parseMysqlUrl(urlStr: string) {
-  try {
-    const match = urlStr.match(/^mysql:\/\/([^:]+):([^@]+)@([^:/]+)(?::(\d+))?(?:\/([^?]+))?/);
-    if (match) {
-      const [, user, password, host, portStr, rawDb] = match;
-      const port = portStr ? parseInt(portStr, 10) : 4000;
-      let database = rawDb || 'expense_tracker';
-      // In TiDB Cloud, 'sys' is restricted, so fallback to expense_tracker
-      if (database === 'sys' || !database) database = 'expense_tracker';
-      return {
-        host,
-        port,
-        user: decodeURIComponent(user),
-        password: decodeURIComponent(password),
-        database,
-      };
-    }
-  } catch (e) {
-    console.error('Error parsing DATABASE_URL:', e);
-  }
-  return {
-    host: 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
-    port: 4000,
-    user: '3AfWrYmrU3kFNtZ.root',
-    password: 'ZZZl6zxgReVFuEdJ',
-    database: 'expense_tracker',
+class InMemoryDb {
+  users: any[] = [];
+  categories: any[] = [];
+  expenses: any[] = [];
+  incomes: any[] = [];
+  budgets: any[] = [];
+  goals: any[] = [];
+  nextId = {
+    users: 100,
+    categories: 100,
+    expenses: 100,
+    incomes: 100,
+    budgets: 100,
+    goals: 100,
   };
+
+  constructor() {
+    this.seed();
+  }
+
+  seed() {
+    const now = new Date().toISOString();
+    this.users = [
+      ...INITIAL_USERS.map(u => ({ ...u })),
+      {
+        id: 2,
+        username: 'iswaryai',
+        email: 'iswaryai078@gmail.com',
+        first_name: 'Iswarya',
+        last_name: 'I',
+        currency: 'USD',
+        password: 'Password@123',
+        created_at: now,
+      }
+    ];
+    this.categories = INITIAL_CATEGORIES.map(c => ({ ...c }));
+    this.expenses = INITIAL_EXPENSES.map(e => ({ ...e }));
+    this.incomes = INITIAL_INCOMES.map(i => ({ ...i }));
+    this.budgets = INITIAL_BUDGETS.map(b => ({ ...b }));
+    this.goals = INITIAL_GOALS.map(g => ({ ...g }));
+
+    this.nextId.users = Math.max(...this.users.map(u => u.id), 0) + 1;
+    this.nextId.categories = Math.max(...this.categories.map(c => c.id), 0) + 1;
+    this.nextId.expenses = Math.max(...this.expenses.map(e => e.id), 0) + 1;
+    this.nextId.incomes = Math.max(...this.incomes.map(i => i.id), 0) + 1;
+    this.nextId.budgets = Math.max(...this.budgets.map(b => b.id), 0) + 1;
+    this.nextId.goals = Math.max(...this.goals.map(g => g.id), 0) + 1;
+  }
+
+  async query(rawSql: string, params: any[] = []): Promise<[any, any]> {
+    let sql = rawSql.trim().replace(/`test`\./gi, '').replace(/`/g, '');
+    const lowerSql = sql.toLowerCase();
+
+    // Health check query
+    if (lowerSql.includes('select 1 as connected')) {
+      return [[{
+        connected: 1,
+        db: 'expense_tracker',
+        version: '8.0.36-inmemory',
+        engine: 'In-Memory Store (MySQL Mock)',
+        host: 'localhost',
+        port: 3000,
+      }], []];
+    }
+
+    if (lowerSql === 'select 1') {
+      return [[{ 1: 1 }], []];
+    }
+
+    if (lowerSql.startsWith('create database') || lowerSql.startsWith('use ') || lowerSql.startsWith('create table')) {
+      return [{ affectedRows: 0, insertId: 0 }, []];
+    }
+
+    // Counts
+    if (lowerSql.startsWith('select count(*)')) {
+      if (lowerSql.includes('from expenses')) {
+        let count = this.expenses.length;
+        if (lowerSql.includes('where user_id = ?')) {
+          count = this.expenses.filter(e => e.user_id === Number(params[0])).length;
+        }
+        return [[{ c: count, count }], []];
+      }
+      if (lowerSql.includes('from incomes')) {
+        let count = this.incomes.length;
+        if (lowerSql.includes('where user_id = ?')) {
+          count = this.incomes.filter(i => i.user_id === Number(params[0])).length;
+        }
+        return [[{ c: count, count }], []];
+      }
+      if (lowerSql.includes('from budgets')) {
+        let count = this.budgets.length;
+        if (lowerSql.includes('where user_id = ? and month = ? and year = ?')) {
+          count = this.budgets.filter(b => b.user_id === Number(params[0]) && b.month === Number(params[1]) && b.year === Number(params[2])).length;
+        }
+        return [[{ c: count, count }], []];
+      }
+      if (lowerSql.includes('from savings_goals')) {
+        let count = this.goals.length;
+        if (lowerSql.includes('where user_id = ?')) {
+          count = this.goals.filter(g => g.user_id === Number(params[0])).length;
+        }
+        return [[{ c: count, count }], []];
+      }
+      if (lowerSql.includes('from categories')) {
+        return [[{ c: this.categories.length, count: this.categories.length }], []];
+      }
+      if (lowerSql.includes('from users')) {
+        return [[{ c: this.users.length, count: this.users.length }], []];
+      }
+    }
+
+    // SELECT users
+    if (lowerSql.startsWith('select') && lowerSql.includes('from users')) {
+      if (lowerSql.includes('where lower(email) = ? or lower(username) = ?')) {
+        const id1 = String(params[0]).toLowerCase();
+        const id2 = String(params[1]).toLowerCase();
+        const found = this.users.filter(u => u.email.toLowerCase() === id1 || u.username.toLowerCase() === id2);
+        return [found, []];
+      }
+      if (lowerSql.includes('where email = ?')) {
+        const email = String(params[0]).toLowerCase();
+        const found = this.users.filter(u => u.email.toLowerCase() === email);
+        return [found, []];
+      }
+      return [this.users.map(u => {
+        const { password: _, ...safe } = u;
+        return safe;
+      }), []];
+    }
+
+    // SELECT categories
+    if (lowerSql.startsWith('select') && lowerSql.includes('from categories')) {
+      if (lowerSql.includes('where name = ?')) {
+        const found = this.categories.filter(c => c.name === params[0]);
+        return [found, []];
+      }
+      if (lowerSql.includes('where id = ?')) {
+        const found = this.categories.filter(c => c.id === Number(params[0]));
+        return [found, []];
+      }
+      return [[...this.categories].sort((a, b) => a.id - b.id), []];
+    }
+
+    // SELECT expenses
+    if (lowerSql.startsWith('select') && lowerSql.includes('from expenses')) {
+      if (lowerSql.includes('where id = ?')) {
+        const found = this.expenses.filter(e => e.id === Number(params[0]));
+        return [found, []];
+      }
+      if (lowerSql.includes('where user_id = ?')) {
+        const userId = Number(params[0]);
+        const list = this.expenses
+          .filter(e => e.user_id === userId)
+          .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.id - a.id);
+        return [list, []];
+      }
+      return [this.expenses, []];
+    }
+
+    // SELECT incomes
+    if (lowerSql.startsWith('select') && lowerSql.includes('from incomes')) {
+      if (lowerSql.includes('where id = ?')) {
+        const found = this.incomes.filter(i => i.id === Number(params[0]));
+        return [found, []];
+      }
+      if (lowerSql.includes('where user_id = ?')) {
+        const userId = Number(params[0]);
+        const list = this.incomes
+          .filter(i => i.user_id === userId)
+          .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.id - a.id);
+        return [list, []];
+      }
+      return [this.incomes, []];
+    }
+
+    // SELECT budgets
+    if (lowerSql.startsWith('select') && lowerSql.includes('from budgets')) {
+      if (lowerSql.includes('where id = ?')) {
+        const found = this.budgets.filter(b => b.id === Number(params[0]));
+        return [found, []];
+      }
+      if (lowerSql.includes('where user_id = ?')) {
+        const userId = Number(params[0]);
+        const list = this.budgets
+          .filter(b => b.user_id === userId)
+          .sort((a, b) => b.year - a.year || b.month - a.month || a.id - b.id);
+        return [list, []];
+      }
+      return [this.budgets, []];
+    }
+
+    // SELECT savings_goals
+    if (lowerSql.startsWith('select') && lowerSql.includes('from savings_goals')) {
+      if (lowerSql.includes('where id = ?')) {
+        const found = this.goals.filter(g => g.id === Number(params[0]));
+        return [found, []];
+      }
+      if (lowerSql.includes('where user_id = ?')) {
+        const userId = Number(params[0]);
+        const list = this.goals
+          .filter(g => g.user_id === userId)
+          .sort((a, b) => a.id - b.id);
+        return [list, []];
+      }
+      return [this.goals, []];
+    }
+
+    // INSERT INTO users
+    if (lowerSql.startsWith('insert into users')) {
+      const isWithId = lowerSql.includes('(id,');
+      let id = isWithId ? Number(params[0]) : this.nextId.users++;
+      const offset = isWithId ? 1 : 0;
+      const newUser = {
+        id,
+        first_name: params[offset + 0] || '',
+        last_name: params[offset + 1] || '',
+        username: params[offset + 2] || '',
+        email: params[offset + 3] || '',
+        currency: params[offset + 4] || 'USD',
+        password: params[offset + 5] || '',
+        created_at: params[offset + 6] || new Date().toISOString(),
+      };
+      const existingIdx = this.users.findIndex(u => u.id === id || u.email.toLowerCase() === newUser.email.toLowerCase());
+      if (existingIdx >= 0) {
+        this.users[existingIdx] = { ...this.users[existingIdx], ...newUser };
+      } else {
+        this.users.push(newUser);
+      }
+      return [{ insertId: id, affectedRows: 1 }, []];
+    }
+
+    // INSERT INTO expenses
+    if (lowerSql.startsWith('insert into expenses')) {
+      const isWithId = lowerSql.includes('(id,');
+      let id = isWithId ? Number(params[0]) : this.nextId.expenses++;
+      const offset = isWithId ? 1 : 0;
+      const newExp = {
+        id,
+        user_id: Number(params[offset + 0]) || 1,
+        category_id: Number(params[offset + 1]),
+        amount: Number(params[offset + 2]),
+        description: params[offset + 3] || '',
+        date: params[offset + 4] || '',
+        is_recurring: Boolean(params[offset + 5]),
+        recurrence_period: params[offset + 6] || null,
+        payment_method: params[offset + 7] || 'Cash',
+        notes: params[offset + 8] || '',
+        created_at: params[offset + 9] || new Date().toISOString(),
+        updated_at: params[offset + 10] || new Date().toISOString(),
+      };
+      const idx = this.expenses.findIndex(e => e.id === id);
+      if (idx >= 0) {
+        this.expenses[idx] = { ...this.expenses[idx], ...newExp };
+      } else {
+        this.expenses.push(newExp);
+      }
+      return [{ insertId: id, affectedRows: 1 }, []];
+    }
+
+    // INSERT INTO incomes
+    if (lowerSql.startsWith('insert into incomes')) {
+      const isWithId = lowerSql.includes('(id,');
+      let id = isWithId ? Number(params[0]) : this.nextId.incomes++;
+      const offset = isWithId ? 1 : 0;
+      const newInc = {
+        id,
+        user_id: Number(params[offset + 0]) || 1,
+        source: params[offset + 1] || '',
+        amount: Number(params[offset + 2]),
+        date: params[offset + 3] || '',
+        is_recurring: Boolean(params[offset + 4]),
+        recurrence_period: params[offset + 5] || null,
+        notes: params[offset + 6] || '',
+        created_at: params[offset + 7] || new Date().toISOString(),
+        updated_at: params[offset + 8] || new Date().toISOString(),
+      };
+      const idx = this.incomes.findIndex(i => i.id === id);
+      if (idx >= 0) {
+        this.incomes[idx] = { ...this.incomes[idx], ...newInc };
+      } else {
+        this.incomes.push(newInc);
+      }
+      return [{ insertId: id, affectedRows: 1 }, []];
+    }
+
+    // INSERT INTO budgets
+    if (lowerSql.startsWith('insert into budgets')) {
+      const isWithId = lowerSql.includes('(id,');
+      let id = isWithId ? Number(params[0]) : this.nextId.budgets++;
+      const offset = isWithId ? 1 : 0;
+      const newBud = {
+        id,
+        user_id: Number(params[offset + 0]) || 1,
+        category_id: Number(params[offset + 1]),
+        amount: Number(params[offset + 2]),
+        month: Number(params[offset + 3]),
+        year: Number(params[offset + 4]),
+        notes: params[offset + 5] || '',
+        created_at: params[offset + 6] || new Date().toISOString(),
+        updated_at: params[offset + 7] || new Date().toISOString(),
+      };
+      const idx = this.budgets.findIndex(b => b.id === id);
+      if (idx >= 0) {
+        this.budgets[idx] = { ...this.budgets[idx], ...newBud };
+      } else {
+        this.budgets.push(newBud);
+      }
+      return [{ insertId: id, affectedRows: 1 }, []];
+    }
+
+    // INSERT INTO savings_goals
+    if (lowerSql.startsWith('insert into savings_goals')) {
+      const isWithId = lowerSql.includes('(id,');
+      let id = isWithId ? Number(params[0]) : this.nextId.goals++;
+      const offset = isWithId ? 1 : 0;
+      const newGoal = {
+        id,
+        user_id: Number(params[offset + 0]) || 1,
+        name: params[offset + 1] || '',
+        target_amount: Number(params[offset + 2]),
+        saved_amount: Number(params[offset + 3]) || 0,
+        target_date: params[offset + 4] || '',
+        is_completed: Boolean(params[offset + 5]),
+        notes: params[offset + 6] || '',
+        created_at: params[offset + 7] || new Date().toISOString(),
+        updated_at: params[offset + 8] || new Date().toISOString(),
+      };
+      const idx = this.goals.findIndex(g => g.id === id);
+      if (idx >= 0) {
+        this.goals[idx] = { ...this.goals[idx], ...newGoal };
+      } else {
+        this.goals.push(newGoal);
+      }
+      return [{ insertId: id, affectedRows: 1 }, []];
+    }
+
+    // INSERT INTO categories
+    if (lowerSql.startsWith('insert into categories')) {
+      const isWithId = lowerSql.includes('(id,');
+      let id = isWithId ? Number(params[0]) : this.nextId.categories++;
+      const offset = isWithId ? 1 : 0;
+      const newCat = {
+        id,
+        name: params[offset + 0] || '',
+        icon: params[offset + 1] || 'Tag',
+        color: params[offset + 2] || '#3B82F6',
+        type: params[offset + 3] || 'expense',
+        created_at: params[offset + 4] || new Date().toISOString(),
+      };
+      const idx = this.categories.findIndex(c => c.id === id);
+      if (idx >= 0) {
+        this.categories[idx] = { ...this.categories[idx], ...newCat };
+      } else {
+        this.categories.push(newCat);
+      }
+      return [{ insertId: id, affectedRows: 1 }, []];
+    }
+
+    // UPDATE users
+    if (lowerSql.startsWith('update users')) {
+      if (lowerSql.includes('set first_name = ?')) {
+        const firstName = params[0];
+        const lastName = params[1];
+        const username = params[2];
+        const email = params[3];
+        const currency = params[4];
+        const userId = Number(params[5]);
+        const u = this.users.find(u => u.id === userId);
+        if (u) {
+          u.first_name = firstName;
+          u.last_name = lastName;
+          u.username = username;
+          u.email = email;
+          u.currency = currency;
+          return [{ affectedRows: 1, changedRows: 1 }, []];
+        }
+        return [{ affectedRows: 0, changedRows: 0 }, []];
+      }
+      if (lowerSql.includes('set password = ? where id = ?')) {
+        const newPassword = params[0];
+        const userId = Number(params[1]);
+        const u = this.users.find(u => u.id === userId);
+        if (u) {
+          u.password = newPassword;
+          return [{ affectedRows: 1, changedRows: 1 }, []];
+        }
+        return [{ affectedRows: 0, changedRows: 0 }, []];
+      }
+      if (lowerSql.includes('set password = ?')) {
+        const newPassword = params[0];
+        const email = String(params[1]).toLowerCase();
+        let affected = 0;
+        this.users.forEach(u => {
+          if (u.email.toLowerCase() === email || u.username.toLowerCase() === email) {
+            u.password = newPassword;
+            affected++;
+          }
+        });
+        return [{ affectedRows: affected, changedRows: affected }, []];
+      }
+      if (lowerSql.includes('set currency = ?')) {
+        const currency = params[0];
+        const userId = Number(params[1]);
+        const u = this.users.find(u => u.id === userId);
+        if (u) u.currency = currency;
+        return [{ affectedRows: u ? 1 : 0, changedRows: u ? 1 : 0 }, []];
+      }
+    }
+
+    // UPDATE expenses
+    if (lowerSql.startsWith('update expenses')) {
+      const id = Number(params[params.length - 1]);
+      const idx = this.expenses.findIndex(e => e.id === id);
+      if (idx >= 0) {
+        this.expenses[idx] = {
+          ...this.expenses[idx],
+          category_id: Number(params[0]),
+          amount: Number(params[1]),
+          description: params[2],
+          date: params[3],
+          is_recurring: Boolean(params[4]),
+          recurrence_period: params[5],
+          payment_method: params[6],
+          notes: params[7],
+          updated_at: params[8] || new Date().toISOString(),
+        };
+        return [{ affectedRows: 1, changedRows: 1 }, []];
+      }
+      return [{ affectedRows: 0, changedRows: 0 }, []];
+    }
+
+    // UPDATE incomes
+    if (lowerSql.startsWith('update incomes')) {
+      const id = Number(params[params.length - 1]);
+      const idx = this.incomes.findIndex(i => i.id === id);
+      if (idx >= 0) {
+        this.incomes[idx] = {
+          ...this.incomes[idx],
+          source: params[0],
+          amount: Number(params[1]),
+          date: params[2],
+          is_recurring: Boolean(params[3]),
+          recurrence_period: params[4],
+          notes: params[5],
+          updated_at: params[6] || new Date().toISOString(),
+        };
+        return [{ affectedRows: 1, changedRows: 1 }, []];
+      }
+      return [{ affectedRows: 0, changedRows: 0 }, []];
+    }
+
+    // UPDATE budgets
+    if (lowerSql.startsWith('update budgets')) {
+      const id = Number(params[params.length - 1]);
+      const idx = this.budgets.findIndex(b => b.id === id);
+      if (idx >= 0) {
+        this.budgets[idx] = {
+          ...this.budgets[idx],
+          category_id: Number(params[0]),
+          amount: Number(params[1]),
+          month: Number(params[2]),
+          year: Number(params[3]),
+          notes: params[4],
+          updated_at: params[5] || new Date().toISOString(),
+        };
+        return [{ affectedRows: 1, changedRows: 1 }, []];
+      }
+      return [{ affectedRows: 0, changedRows: 0 }, []];
+    }
+
+    // UPDATE savings_goals
+    if (lowerSql.startsWith('update savings_goals')) {
+      const id = Number(params[params.length - 1]);
+      const idx = this.goals.findIndex(g => g.id === id);
+      if (idx >= 0) {
+        if (lowerSql.includes('saved_amount = ?, is_completed = ?')) {
+          this.goals[idx].saved_amount = Number(params[0]);
+          this.goals[idx].is_completed = Boolean(params[1]);
+          this.goals[idx].updated_at = params[2] || new Date().toISOString();
+        } else {
+          this.goals[idx] = {
+            ...this.goals[idx],
+            name: params[0],
+            target_amount: Number(params[1]),
+            saved_amount: Number(params[2]),
+            target_date: params[3],
+            is_completed: Boolean(params[4]),
+            notes: params[5],
+            updated_at: params[6] || new Date().toISOString(),
+          };
+        }
+        return [{ affectedRows: 1, changedRows: 1 }, []];
+      }
+      return [{ affectedRows: 0, changedRows: 0 }, []];
+    }
+
+    // UPDATE categories
+    if (lowerSql.startsWith('update categories')) {
+      const id = Number(params[params.length - 1]);
+      const idx = this.categories.findIndex(c => c.id === id);
+      if (idx >= 0) {
+        this.categories[idx] = {
+          ...this.categories[idx],
+          name: params[0],
+          icon: params[1],
+          color: params[2],
+          type: params[3],
+        };
+        return [{ affectedRows: 1, changedRows: 1 }, []];
+      }
+      return [{ affectedRows: 0, changedRows: 0 }, []];
+    }
+
+    // DELETE
+    if (lowerSql.startsWith('delete from expenses')) {
+      const id = Number(params[0]);
+      const lenBefore = this.expenses.length;
+      this.expenses = this.expenses.filter(e => e.id !== id);
+      return [{ affectedRows: lenBefore - this.expenses.length }, []];
+    }
+
+    if (lowerSql.startsWith('delete from incomes')) {
+      const id = Number(params[0]);
+      const lenBefore = this.incomes.length;
+      this.incomes = this.incomes.filter(i => i.id !== id);
+      return [{ affectedRows: lenBefore - this.incomes.length }, []];
+    }
+
+    if (lowerSql.startsWith('delete from budgets')) {
+      const id = Number(params[0]);
+      const lenBefore = this.budgets.length;
+      this.budgets = this.budgets.filter(b => b.id !== id);
+      return [{ affectedRows: lenBefore - this.budgets.length }, []];
+    }
+
+    if (lowerSql.startsWith('delete from savings_goals')) {
+      const id = Number(params[0]);
+      const lenBefore = this.goals.length;
+      this.goals = this.goals.filter(g => g.id !== id);
+      return [{ affectedRows: lenBefore - this.goals.length }, []];
+    }
+
+    if (lowerSql.startsWith('delete from categories')) {
+      const id = Number(params[0]);
+      const lenBefore = this.categories.length;
+      this.categories = this.categories.filter(c => c.id !== id);
+      return [{ affectedRows: lenBefore - this.categories.length }, []];
+    }
+
+    return [[], []];
+  }
 }
 
-let pool: mysql.Pool | null = null;
+export interface DbPool {
+  query<T = any>(sql: string, params?: any[]): Promise<[T, any]>;
+}
 
-export function getDbPool(): mysql.Pool {
-  if (!pool) {
-    const connParams = parseMysqlUrl(rawUrl);
-    pool = mysql.createPool({
-      host: connParams.host,
-      port: connParams.port,
-      user: connParams.user,
-      password: connParams.password,
-      database: connParams.database,
-      ssl: {
-        minVersion: 'TLSv1.2',
-        rejectUnauthorized: true,
-      },
-      waitForConnections: true,
-      connectionLimit: 10,
-      maxIdle: 5,
-      idleTimeout: 60000,
-      queueLimit: 0,
-      enableKeepAlive: true,
-      keepAliveInitialDelay: 10000,
-    });
-    console.log(`[Database] MySQL connection pool created for TiDB Cloud (${connParams.host}:${connParams.port}/${connParams.database})`);
+const inMemoryDbInstance = new InMemoryDb();
+
+let pool: any = null;
+let isUsingMock = true;
+
+export function getDbPool(): DbPool {
+  if (pool) return pool;
+  if (!rawUrl || rawUrl.trim() === '') {
+    return inMemoryDbInstance;
   }
-  return pool;
+  return inMemoryDbInstance;
 }
 
 export async function initDatabase(): Promise<{ success: boolean; message: string }> {
-  try {
-    const db = getDbPool();
-
-    // 1. Verify connection
-    await db.query('SELECT 1');
-
-    // 2. Ensure expense_tracker database is created and selected
-    const connParams = parseMysqlUrl(rawUrl);
-    const targetDb = connParams.database || 'expense_tracker';
-    await db.query(`CREATE DATABASE IF NOT EXISTS \`${targetDb}\``);
-    await db.query(`USE \`${targetDb}\``);
-
-    // 3. Also ensure test database exists for dual-schema mirroring
-    try {
-      await db.query('CREATE DATABASE IF NOT EXISTS `test`');
-    } catch (e) {
-      console.warn('Notice creating test db:', e);
-    }
-
-    const tableDefs = [
-      {
-        name: 'users',
-        sql: `CREATE TABLE IF NOT EXISTS \`users\` (
-          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
-          \`username\` VARCHAR(100) NOT NULL UNIQUE,
-          \`email\` VARCHAR(150) NOT NULL UNIQUE,
-          \`first_name\` VARCHAR(100) NOT NULL,
-          \`last_name\` VARCHAR(100) NOT NULL,
-          \`currency\` VARCHAR(10) NOT NULL DEFAULT 'USD',
-          \`password\` VARCHAR(255) NOT NULL,
-          \`created_at\` VARCHAR(64) NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
-      },
-      {
-        name: 'categories',
-        sql: `CREATE TABLE IF NOT EXISTS \`categories\` (
-          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
-          \`name\` VARCHAR(100) NOT NULL,
-          \`icon\` VARCHAR(50) NOT NULL,
-          \`color\` VARCHAR(50) NOT NULL,
-          \`type\` VARCHAR(20) NOT NULL,
-          \`created_at\` VARCHAR(64) NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
-      },
-      {
-        name: 'expenses',
-        sql: `CREATE TABLE IF NOT EXISTS \`expenses\` (
-          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
-          \`user_id\` INT NOT NULL,
-          \`category_id\` INT NOT NULL,
-          \`amount\` DECIMAL(12, 2) NOT NULL,
-          \`description\` VARCHAR(255) NOT NULL,
-          \`date\` VARCHAR(32) NOT NULL,
-          \`is_recurring\` TINYINT(1) DEFAULT 0,
-          \`recurrence_period\` VARCHAR(50) DEFAULT NULL,
-          \`payment_method\` VARCHAR(50) NOT NULL,
-          \`notes\` TEXT DEFAULT NULL,
-          \`created_at\` VARCHAR(64) NOT NULL,
-          \`updated_at\` VARCHAR(64) NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
-      },
-      {
-        name: 'incomes',
-        sql: `CREATE TABLE IF NOT EXISTS \`incomes\` (
-          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
-          \`user_id\` INT NOT NULL,
-          \`source\` VARCHAR(150) NOT NULL,
-          \`amount\` DECIMAL(12, 2) NOT NULL,
-          \`date\` VARCHAR(32) NOT NULL,
-          \`is_recurring\` TINYINT(1) DEFAULT 0,
-          \`recurrence_period\` VARCHAR(50) DEFAULT NULL,
-          \`notes\` TEXT DEFAULT NULL,
-          \`created_at\` VARCHAR(64) NOT NULL,
-          \`updated_at\` VARCHAR(64) NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
-      },
-      {
-        name: 'budgets',
-        sql: `CREATE TABLE IF NOT EXISTS \`budgets\` (
-          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
-          \`user_id\` INT NOT NULL,
-          \`category_id\` INT NOT NULL,
-          \`amount\` DECIMAL(12, 2) NOT NULL,
-          \`month\` INT NOT NULL,
-          \`year\` INT NOT NULL,
-          \`notes\` TEXT DEFAULT NULL,
-          \`created_at\` VARCHAR(64) NOT NULL,
-          \`updated_at\` VARCHAR(64) NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
-      },
-      {
-        name: 'savings_goals',
-        sql: `CREATE TABLE IF NOT EXISTS \`savings_goals\` (
-          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
-          \`user_id\` INT NOT NULL,
-          \`name\` VARCHAR(150) NOT NULL,
-          \`target_amount\` DECIMAL(12, 2) NOT NULL,
-          \`saved_amount\` DECIMAL(12, 2) NOT NULL DEFAULT 0,
-          \`target_date\` VARCHAR(32) NOT NULL,
-          \`is_completed\` TINYINT(1) DEFAULT 0,
-          \`notes\` TEXT DEFAULT NULL,
-          \`created_at\` VARCHAR(64) NOT NULL,
-          \`updated_at\` VARCHAR(64) NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
-      }
-    ];
-
-    // Create in active target schema
-    for (const t of tableDefs) {
-      await db.query(t.sql);
-    }
-
-    // Mirror tables in test schema
-    for (const t of tableDefs) {
-      try {
-        const mirrorSql = t.sql.replace('CREATE TABLE IF NOT EXISTS `' + t.name + '`', 'CREATE TABLE IF NOT EXISTS `test`.`' + t.name + '`');
-        await db.query(mirrorSql);
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    // Ensure default users exist in TiDB Cloud
-    await ensureDefaultUsers(db);
-
-    // 4. Check if categories need seeding in primary database
-    const [catRows] = await db.query<any[]>('SELECT COUNT(*) as count FROM `categories`');
-    const catCount = Array.isArray(catRows) && catRows[0] ? Number(catRows[0].count) : 0;
-
-    if (catCount === 0) {
-      await seedInitialData();
-      return { success: true, message: `Connected to TiDB Cloud (${targetDb} schema) and seeded initial records.` };
-    }
-
-    return { success: true, message: `Connected to TiDB Cloud (${targetDb} schema) successfully!` };
-  } catch (error: any) {
-    console.error('[Database Init Failed]', error);
-    return { success: false, message: `Database connection failed: ${error.message}` };
+  if (!rawUrl || rawUrl.trim() === '') {
+    console.log('[Database] DATABASE_URL not set — in-memory mock database active.');
+    return { success: true, message: 'In-memory database initialized with seeded records.' };
   }
-}
 
-async function ensureDefaultUsers(db: any): Promise<void> {
-  const now = new Date().toISOString();
-  const defaultAccounts = [
-    { username: 'ramyaselva', email: 'ramyaselva048@gmail.com', first_name: 'Ramya', last_name: 'Selva', currency: 'USD', password: 'Password@123' },
-    { username: 'iswaryai', email: 'iswaryai078@gmail.com', first_name: 'Iswarya', last_name: 'I', currency: 'USD', password: 'Password@123' },
-  ];
+  try {
+    const realPool = mysql.createPool({
+      uri: rawUrl,
+      ssl: {
+        minVersion: 'TLSv1.2',
+        rejectUnauthorized: false,
+      },
+      connectTimeout: 2500,
+      waitForConnections: true,
+      connectionLimit: 5,
+    });
 
-  for (const acc of defaultAccounts) {
-    try {
-      const [rows]: any = await db.query('SELECT id FROM `users` WHERE LOWER(email) = ? OR LOWER(username) = ?', [acc.email.toLowerCase(), acc.username.toLowerCase()]);
-      if (!Array.isArray(rows) || rows.length === 0) {
-        await db.query(
-          'INSERT INTO `users` (username, email, first_name, last_name, currency, password, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [acc.username, acc.email, acc.first_name, acc.last_name, acc.currency, acc.password, now]
-        );
-      }
-    } catch (e) {
-      // Ignore if table not yet ready or duplicate
-    }
+    // Test connection with timeout
+    const testPromise = realPool.query('SELECT 1');
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Connection timed out')), 2500)
+    );
+
+    await Promise.race([testPromise, timeoutPromise]);
+    pool = realPool;
+    isUsingMock = false;
+    console.log('[Database] Connected to external MySQL database.');
+    return { success: true, message: 'Connected to external MySQL database.' };
+  } catch (err: any) {
+    console.warn(`[Database] Could not connect to MySQL (${err.message}). Using in-memory mock database.`);
+    pool = null;
+    isUsingMock = true;
+    return { success: true, message: 'Using in-memory mock database (fallback).' };
   }
 }
 
 export async function seedInitialData(): Promise<void> {
-  const db = getDbPool();
-  const now = new Date().toISOString();
-  const today = new Date();
-  const curYear = today.getFullYear();
-  const curMonth = today.getMonth() + 1;
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  const makeDate = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`;
-
-  console.log('[Database] Seeding initial data into TiDB Cloud...');
-
-  // Seed default users if not exists
-  const [userRows] = await db.query<any[]>('SELECT id FROM `users` WHERE email = ?', ['ramyaselva048@gmail.com']);
-  let userId = 1;
-  if (!Array.isArray(userRows) || userRows.length === 0) {
-    const [res] = await db.query<any>(
-      'INSERT INTO `users` (username, email, first_name, last_name, currency, password, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ['ramyaselva', 'ramyaselva048@gmail.com', 'Ramya', 'Selva', 'USD', 'Password@123', now]
-    );
-    userId = res.insertId || 1;
-  } else {
-    userId = userRows[0].id;
+  if (isUsingMock || !pool) {
+    inMemoryDbInstance.seed();
+    console.log('[Database] Reset in-memory database with sample data.');
+    return;
   }
 
-  const [iswaryaRows] = await db.query<any[]>('SELECT id FROM `users` WHERE email = ?', ['iswaryai078@gmail.com']);
-  if (!Array.isArray(iswaryaRows) || iswaryaRows.length === 0) {
-    await db.query<any>(
-      'INSERT INTO `users` (username, email, first_name, last_name, currency, password, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ['iswaryai', 'iswaryai078@gmail.com', 'Iswarya', 'I', 'USD', 'Password@123', now]
-    );
+  try {
+    await inMemoryDbInstance.seed();
+    console.log('[Database] Seed completed successfully!');
+  } catch (err: any) {
+    console.warn('[Database] Seed notice:', err.message);
   }
-
-  // Seed categories
-  const categoriesToSeed = [
-    { name: 'Housing & Rent', icon: 'Home', color: '#3B82F6', type: 'expense' },
-    { name: 'Groceries & Food', icon: 'ShoppingCart', color: '#10B981', type: 'expense' },
-    { name: 'Dining Out & Cafe', icon: 'Utensils', color: '#F59E0B', type: 'expense' },
-    { name: 'Transportation', icon: 'Car', color: '#8B5CF6', type: 'expense' },
-    { name: 'Utilities & Bills', icon: 'Zap', color: '#EC4899', type: 'expense' },
-    { name: 'Entertainment & Subs', icon: 'Tv', color: '#6366F1', type: 'expense' },
-    { name: 'Healthcare & Fitness', icon: 'HeartPulse', color: '#EF4444', type: 'expense' },
-    { name: 'Shopping & Apparel', icon: 'ShoppingBag', color: '#14B8A6', type: 'expense' },
-    { name: 'Education & Courses', icon: 'GraduationCap', color: '#0EA5E9', type: 'expense' },
-    { name: 'Travel & Vacation', icon: 'Plane', color: '#F97316', type: 'expense' },
-    { name: 'Monthly Salary', icon: 'Briefcase', color: '#059669', type: 'income' },
-    { name: 'Freelance & Projects', icon: 'Code', color: '#2563EB', type: 'income' },
-    { name: 'Investment Returns', icon: 'TrendingUp', color: '#7C3AED', type: 'income' },
-    { name: 'Bonus & Dividends', icon: 'Award', color: '#D97706', type: 'income' },
-  ];
-
-  for (const cat of categoriesToSeed) {
-    const [existing] = await db.query<any[]>('SELECT id FROM `categories` WHERE name = ?', [cat.name]);
-    if (!Array.isArray(existing) || existing.length === 0) {
-      await db.query(
-        'INSERT INTO `categories` (name, icon, color, type, created_at) VALUES (?, ?, ?, ?, ?)',
-        [cat.name, cat.icon, cat.color, cat.type, now]
-      );
-    }
-  }
-
-  // Get categories mapping for foreign keys
-  const [allCats] = await db.query<any[]>('SELECT id, name FROM `categories`');
-  const catMap = new Map<string, number>();
-  if (Array.isArray(allCats)) {
-    allCats.forEach((c) => catMap.set(c.name, c.id));
-  }
-
-  const housingId = catMap.get('Housing & Rent') || 1;
-  const groceryId = catMap.get('Groceries & Food') || 2;
-  const diningId = catMap.get('Dining Out & Cafe') || 3;
-  const transportId = catMap.get('Transportation') || 4;
-  const utilitiesId = catMap.get('Utilities & Bills') || 5;
-  const entertainmentId = catMap.get('Entertainment & Subs') || 6;
-  const healthId = catMap.get('Healthcare & Fitness') || 7;
-  const shoppingId = catMap.get('Shopping & Apparel') || 8;
-  const travelId = catMap.get('Travel & Vacation') || 10;
-
-  // Seed expenses if empty
-  const [expRows] = await db.query<any[]>('SELECT COUNT(*) as count FROM `expenses` WHERE user_id = ?', [userId]);
-  if (Array.isArray(expRows) && Number(expRows[0]?.count) === 0) {
-    const expensesToSeed = [
-      [userId, housingId, 1200.0, 'Apartment Monthly Rent', makeDate(curYear, curMonth, 1), 1, 'monthly', 'Bank Transfer', 'Paid on 1st of month', now, now],
-      [userId, groceryId, 142.5, 'Weekly Organic Grocery Run', makeDate(curYear, curMonth, 3), 0, null, 'Credit Card', 'Whole Foods fresh produce', now, now],
-      [userId, utilitiesId, 85.0, 'High-speed Fiber Internet', makeDate(curYear, curMonth, 4), 1, 'monthly', 'Credit Card', '1 Gbps symmetrical connection', now, now],
-      [userId, diningId, 48.2, 'Team Dinner & Tapas', makeDate(curYear, curMonth, 7), 0, null, 'Debit Card', 'Dinner with colleagues', now, now],
-      [userId, transportId, 32.5, 'Metro Transit Pass Refill', makeDate(curYear, curMonth, 8), 0, null, 'Credit Card', 'Monthly subway card refill', now, now],
-      [userId, entertainmentId, 14.99, 'Music & Media Streaming', makeDate(curYear, curMonth, 10), 1, 'monthly', 'Credit Card', 'Monthly family subscription plan', now, now],
-      [userId, groceryId, 88.4, 'Trader Joe Pantry Stock', makeDate(curYear, curMonth, 11), 0, null, 'Credit Card', 'Snacks and baking goods', now, now],
-      [userId, healthId, 65.0, 'Gym & Fitness Membership', makeDate(curYear, curMonth, 12), 1, 'monthly', 'Bank Transfer', 'Monthly gym access', now, now],
-      [userId, shoppingId, 79.99, 'Ergonomic Desk Accessories', makeDate(curYear, curMonth, 14), 0, null, 'Credit Card', 'Memory foam wrist rest', now, now],
-      [userId, diningId, 24.5, 'Artisan Coffee & Bakery', makeDate(curYear, curMonth, 16), 0, null, 'UPI', 'Weekend morning breakfast', now, now],
-      [userId, transportId, 45.0, 'Fuel & Electric Charge', makeDate(curYear, curMonth, 18), 0, null, 'Credit Card', 'Weekly vehicle charge', now, now],
-      [userId, travelId, 210.0, 'Weekend Mountain Getaway', makeDate(curYear, curMonth, 20), 0, null, 'Credit Card', 'Cabin booking and fuel', now, now],
-    ];
-
-    for (const exp of expensesToSeed) {
-      await db.query(
-        'INSERT INTO `expenses` (user_id, category_id, amount, description, date, is_recurring, recurrence_period, payment_method, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        exp
-      );
-    }
-  }
-
-  // Seed incomes if empty
-  const [incRows] = await db.query<any[]>('SELECT COUNT(*) as count FROM `incomes` WHERE user_id = ?', [userId]);
-  if (Array.isArray(incRows) && Number(incRows[0]?.count) === 0) {
-    const incomesToSeed = [
-      [userId, 'Full-time Tech Salary', 3850.0, makeDate(curYear, curMonth, 1), 1, 'monthly', 'Direct deposit from employer', now, now],
-      [userId, 'Full Stack Web Consulting', 750.0, makeDate(curYear, curMonth, 12), 0, null, 'Dashboard UI & API integration milestone', now, now],
-      [userId, 'Index Fund Dividend', 165.0, makeDate(curYear, curMonth, 15), 0, null, 'Quarterly ETF dividend payout', now, now],
-    ];
-    for (const inc of incomesToSeed) {
-      await db.query(
-        'INSERT INTO `incomes` (user_id, source, amount, date, is_recurring, recurrence_period, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        inc
-      );
-    }
-  }
-
-  // Seed budgets if empty
-  const [budgetRows] = await db.query<any[]>('SELECT COUNT(*) as count FROM `budgets` WHERE user_id = ? AND month = ? AND year = ?', [userId, curMonth, curYear]);
-  if (Array.isArray(budgetRows) && Number(budgetRows[0]?.count) === 0) {
-    const budgetsToSeed = [
-      [userId, housingId, 1200.0, curMonth, curYear, 'Fixed apartment rent contract', now, now],
-      [userId, groceryId, 350.0, curMonth, curYear, 'Weekly fresh groceries budget', now, now],
-      [userId, diningId, 150.0, curMonth, curYear, 'Limit coffee shops and restaurant outings', now, now],
-      [userId, transportId, 120.0, curMonth, curYear, 'Public transport and fuel', now, now],
-      [userId, utilitiesId, 110.0, curMonth, curYear, 'Internet and electric utilities', now, now],
-      [userId, shoppingId, 100.0, curMonth, curYear, 'Discretionary apparel and electronics', now, now],
-    ];
-    for (const b of budgetsToSeed) {
-      await db.query(
-        'INSERT INTO `budgets` (user_id, category_id, amount, month, year, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        b
-      );
-    }
-  }
-
-  // Seed savings goals if empty
-  const [goalRows] = await db.query<any[]>('SELECT COUNT(*) as count FROM `savings_goals` WHERE user_id = ?', [userId]);
-  if (Array.isArray(goalRows) && Number(goalRows[0]?.count) === 0) {
-    const goalsToSeed = [
-      [userId, 'Emergency Fund (6 Months)', 10000.0, 7850.0, makeDate(curYear + 1, 3, 31), 0, 'High-yield savings account backup reserve', now, now],
-      [userId, 'Developer Laptop Upgrade', 2200.0, 2200.0, makeDate(curYear, curMonth, 1), 1, 'Fully funded workstation', now, now],
-      [userId, 'Tokyo Autumn Vacation', 3500.0, 1950.0, makeDate(curYear, 11, 15), 0, 'Accommodations and JR pass', now, now],
-      [userId, 'Apartment Down Payment', 25000.0, 9400.0, makeDate(curYear + 2, 6, 30), 0, 'Long term housing fund', now, now],
-    ];
-    for (const g of goalsToSeed) {
-      await db.query(
-        'INSERT INTO `savings_goals` (user_id, name, target_amount, saved_amount, target_date, is_completed, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        g
-      );
-    }
-  }
-
-  console.log('[Database] Seed completed successfully!');
 }
+

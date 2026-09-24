@@ -7,13 +7,13 @@ import {
   Target, 
   BarChart3, 
   FileSpreadsheet, 
-  GraduationCap,
   PlusCircle,
   Coins,
   ChevronDown,
   LogOut,
   User as UserIcon,
-  Users,
+  UserCog,
+  KeyRound,
   RotateCcw,
   Database,
   CheckCircle2,
@@ -30,11 +30,10 @@ interface NavbarProps {
   onUpdateCurrency: (currency: CurrencyCode) => void;
   onOpenNewExpense: () => void;
   onOpenNewIncome: () => void;
-  onOpenInternshipHub: () => void;
+  onOpenEditProfile: () => void;
+  onOpenResetPassword: () => void;
   onLogout: () => void;
   onResetData?: () => void;
-  allUsers?: User[];
-  onSwitchUser?: (user: User) => void;
   onRefreshData?: () => void;
   counts?: { expenses: number; incomes: number; budgets: number; goals: number };
 }
@@ -46,11 +45,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onUpdateCurrency,
   onOpenNewExpense,
   onOpenNewIncome,
-  onOpenInternshipHub,
+  onOpenEditProfile,
+  onOpenResetPassword,
   onLogout,
   onResetData,
-  allUsers = [],
-  onSwitchUser,
   onRefreshData,
   counts,
 }) => {
@@ -318,51 +316,35 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
                     </div>
 
-                    {/* Switch User Demo Accounts */}
-                    {allUsers.length > 1 && onSwitchUser && (
-                      <div className="px-3 py-2 border-b border-slate-100">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5 flex items-center gap-1">
-                          <Users className="w-3 h-3" />
-                          <span>Switch Account</span>
-                        </p>
-                        <div className="space-y-1">
-                          {allUsers.map((u) => (
-                            <button
-                              key={u.id}
-                              onClick={() => {
-                                setShowUserMenu(false);
-                                onSwitchUser(u);
-                              }}
-                              className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition cursor-pointer ${
-                                u.id === user.id
-                                  ? 'bg-amber-50 font-bold text-amber-900'
-                                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                              }`}
-                            >
-                              <span className="truncate">{u.first_name} {u.last_name}</span>
-                              {u.id === user.id ? (
-                                <span className="text-[10px] font-mono text-amber-600">Active</span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400">Switch</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Action buttons */}
-                    <div className="px-2 pt-2 space-y-1">
+                    {/* Profile & Account Settings */}
+                    <div className="px-2 pt-2 pb-1 space-y-1 border-b border-slate-100">
                       <button
+                        id="menu-edit-profile-btn"
                         onClick={() => {
                           setShowUserMenu(false);
-                          onOpenInternshipHub();
+                          onOpenEditProfile();
                         }}
-                        className="w-full px-3 py-2 text-left rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-2 transition cursor-pointer"
+                        className="w-full px-3 py-2 text-left rounded-xl text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-900 flex items-center gap-2.5 transition cursor-pointer"
                       >
-                        <GraduationCap className="w-4 h-4 text-amber-600" />
-                        <span>Internship Dossier & SQL Dump</span>
+                        <UserCog className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Edit Profile</span>
                       </button>
+
+                      <button
+                        id="menu-reset-password-btn"
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          onOpenResetPassword();
+                        }}
+                        className="w-full px-3 py-2 text-left rounded-xl text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-900 flex items-center gap-2.5 transition cursor-pointer"
+                      >
+                        <KeyRound className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Reset Password</span>
+                      </button>
+                    </div>
+
+                    {/* System & Session actions */}
+                    <div className="px-2 pt-1 space-y-1">
                       {onResetData && (
                         <button
                           id="menu-reset-btn"
@@ -370,10 +352,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                             setShowUserMenu(false);
                             onResetData();
                           }}
-                          className="w-full px-3 py-2 text-left rounded-xl text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-900 flex items-center gap-2 transition cursor-pointer"
+                          className="w-full px-3 py-2 text-left rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-800 flex items-center gap-2.5 transition cursor-pointer"
                         >
-                          <RotateCcw className="w-4 h-4 text-amber-600" />
-                          <span>Reset All Data & Restore Sample</span>
+                          <RotateCcw className="w-4 h-4 text-slate-500 shrink-0" />
+                          <span>Reset Data to Default</span>
                         </button>
                       )}
                       <button
@@ -382,9 +364,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                           setShowUserMenu(false);
                           onLogout();
                         }}
-                        className="w-full px-3 py-2 text-left rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition cursor-pointer"
+                        className="w-full px-3 py-2 text-left rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition cursor-pointer"
                       >
-                        <LogOut className="w-4 h-4" />
+                        <LogOut className="w-4 h-4 shrink-0" />
                         <span>Log Out of Session</span>
                       </button>
                     </div>

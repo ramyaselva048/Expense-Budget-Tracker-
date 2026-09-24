@@ -37,7 +37,8 @@ import { BudgetModal } from './components/BudgetModal';
 import { GoalModal } from './components/GoalModal';
 import { GoalFundsModal } from './components/GoalFundsModal';
 import { CategoryModal } from './components/CategoryModal';
-import { InternshipHubModal } from './components/InternshipHubModal';
+import { EditProfileModal } from './components/EditProfileModal';
+import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { CheckCircle2, AlertCircle, Database } from 'lucide-react';
 import { api } from './services/api';
@@ -156,7 +157,8 @@ export default function App() {
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [isInternshipHubOpen, setIsInternshipHubOpen] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
 
   // Delete Confirmation Modal State
   const [deleteModalState, setDeleteModalState] = useState<{
@@ -275,13 +277,49 @@ export default function App() {
     showToast('Logged out of session', 'info');
   };
 
-  const handleSwitchUser = (switchedUser: User) => {
-    setUser(switchedUser);
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(switchedUser));
-    showToast(`Switched account to ${switchedUser.first_name} ${switchedUser.last_name}`);
+  // Handler: Edit User Profile
+  const handleSaveProfile = async (updatedData: Partial<User> & { id: number }) => {
+    try {
+      const res = await api.updateUserProfile(updatedData);
+      if (res && res.success && res.user) {
+        const updatedUser = { ...user, ...res.user };
+        setUser(updatedUser);
+        setUsers(prev => prev.map(u => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u)));
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
+        showToast('Profile updated successfully!');
+      } else {
+        const updatedUser = { ...user, ...updatedData };
+        setUser(updatedUser);
+        setUsers(prev => prev.map(u => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u)));
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
+        showToast('Profile updated!');
+      }
+    } catch (err: any) {
+      console.error('Failed to update profile:', err);
+      showToast(err.message || 'Error updating profile', 'error');
+      throw err;
+    }
   };
 
-  // Password Update Handler
+  // Handler: Change / Reset Password
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+    try {
+      const res = await api.changePassword(user.id, currentPassword, newPassword);
+      if (res && res.success) {
+        setUser(prev => ({ ...prev, password: newPassword }));
+        setUsers(prev => prev.map(u => (u.id === user.id ? { ...u, password: newPassword } : u)));
+        showToast('Password updated successfully!');
+      } else {
+        throw new Error(res?.message || 'Failed to update password');
+      }
+    } catch (err: any) {
+      console.error('Failed to change password:', err);
+      showToast(err.message || 'Error changing password', 'error');
+      throw err;
+    }
+  };
+
+  // Password Update Handler for unauthenticated reset
   const handleUpdateUserPassword = (email: string, newPasswordHash: string): boolean => {
     setUsers(prev =>
       prev.map(u => (u.email.toLowerCase() === email.toLowerCase() ? { ...u, password: newPasswordHash } : u))
@@ -687,17 +725,6 @@ export default function App() {
           defaultEmail=""
         />
 
-        <InternshipHubModal
-          isOpen={isInternshipHubOpen}
-          onClose={() => setIsInternshipHubOpen(false)}
-          user={user}
-          categories={categories}
-          expenses={expenses}
-          incomes={incomes}
-          budgets={budgets}
-          goals={goals}
-        />
-
         {/* Floating Toast Notification */}
         {toast && (
           <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg text-xs font-bold text-white bg-slate-900 border border-slate-800 animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -727,11 +754,10 @@ export default function App() {
           setTxModalType('income');
           setIsTxModalOpen(true);
         }}
-        onOpenInternshipHub={() => setIsInternshipHubOpen(true)}
+        onOpenEditProfile={() => setIsEditProfileOpen(true)}
+        onOpenResetPassword={() => setIsResetPasswordOpen(true)}
         onLogout={handleLogout}
         onResetData={handleResetData}
-        allUsers={users}
-        onSwitchUser={handleSwitchUser}
         onRefreshData={refreshData}
         counts={{
           expenses: expenses.length,
@@ -968,15 +994,20 @@ export default function App() {
         initialCategory={editingCategory}
       />
 
-      <InternshipHubModal
-        isOpen={isInternshipHubOpen}
-        onClose={() => setIsInternshipHubOpen(false)}
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        isOpen={isEditProfileOpen}
+        onClose={() => setIsEditProfileOpen(false)}
         user={user}
-        categories={categories}
-        expenses={expenses}
-        incomes={incomes}
-        budgets={budgets}
-        goals={goals}
+        onSaveProfile={handleSaveProfile}
+      />
+
+      {/* Reset Password Modal */}
+      <ResetPasswordModal
+        isOpen={isResetPasswordOpen}
+        onClose={() => setIsResetPasswordOpen(false)}
+        user={user}
+        onChangePassword={handleChangePassword}
       />
 
       {/* Delete Confirmation Modal */}

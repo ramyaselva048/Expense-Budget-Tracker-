@@ -59,11 +59,11 @@ app.get('/api/health', async (_req, res) => {
       ok: true,
       status: 'healthy',
       database: 'connected',
-      engine: 'TiDB Cloud Serverless (MySQL compatible)',
-      host: 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
-      port: 4000,
+      engine: dbInfo.engine || 'MySQL In-Memory Store',
+      host: dbInfo.host || 'localhost',
+      port: dbInfo.port || 3000,
       databaseName: dbInfo.db || 'expense_tracker',
-      version: dbInfo.version || 'TiDB Serverless',
+      version: dbInfo.version || '8.0',
       counts: {
         expenses: exp[0]?.c || 0,
         incomes: inc[0]?.c || 0,
@@ -790,7 +790,93 @@ app.patch('/api/user/currency', async (req, res) => {
   }
 });
 
-// 12. Reset Data
+// 12. User Profile Update
+app.put('/api/user/profile', async (req, res) => {
+  try {
+    const { id, first_name, last_name, username, email, currency } = req.body;
+    const userId = Number(id);
+    if (!userId || !first_name || !username || !email) {
+      return res.status(400).json({ success: false, message: 'First name, username and email are required.' });
+    }
+
+    const pool = getDbPool();
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanUsername = String(username).trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+    // Check if email or username already taken by another user
+    const [existing] = await pool.query<any[]>(
+      'SELECT id, username, email FROM users WHERE (LOWER(email) = ? OR LOWER(username) = ?) AND id != ? LIMIT 1',
+      [cleanEmail, cleanUsername, userId]
+    );
+
+    if (Array.isArray(existing) && existing.length > 0) {
+      return res.status(409).json({ success: false, message: 'This email or username is already taken by another account.' });
+    }
+
+    const updateSql = 'UPDATE users SET first_name = ?, last_name = ?, username = ?, email = ?, currency = ? WHERE id = ?';
+    const updateParams = [first_name.trim(), (last_name || '').trim(), cleanUsername, cleanEmail, currency || 'USD', userId];
+
+    await pool.query(updateSql, updateParams);
+    await mirrorQuery(pool, updateSql, updateParams);
+
+    const updatedUser = {
+      id: userId,
+      first_name: first_name.trim(),
+      last_name: (last_name || '').trim(),
+      username: cleanUsername,
+      email: cleanEmail,
+      currency: currency || 'USD',
+    };
+
+    res.json({ success: true, user: updatedUser, message: 'Profile updated successfully!' });
+  } catch (error: any) {
+    console.error('[Update Profile Error]', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 13. Change Password for authenticated user
+app.post('/api/auth/change-password', async (req, res) => {
+  try {
+    const { userId, currentPassword, newPassword } = req.body;
+    if (!userId || !currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current password and new password are required.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters long.' });
+    }
+
+    const pool = getDbPool();
+    const [rows] = await pool.query<any[]>(
+      'SELECT * FROM users WHERE id = ? LIMIT 1',
+      [Number(userId)]
+    );
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User account not found.' });
+    }
+
+    const user = rows[0];
+    const saltedHash = crypto.createHash('sha256').update(currentPassword + '_ebt_salt_sec_2026').digest('hex');
+    const rawHash = crypto.createHash('sha256').update(currentPassword).digest('hex');
+    const validPasswords = [currentPassword, saltedHash, rawHash, `hash_${currentPassword}`];
+
+    if (!validPasswords.includes(user.password)) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect. Please check and try again.' });
+    }
+
+    const updateSql = 'UPDATE users SET password = ? WHERE id = ?';
+    await pool.query(updateSql, [newPassword, Number(userId)]);
+    await mirrorQuery(pool, updateSql, [newPassword, Number(userId)]);
+
+    res.json({ success: true, message: 'Password changed successfully!' });
+  } catch (error: any) {
+    console.error('[Change Password Error]', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 14. Reset Data
 app.post('/api/reset-data', async (req, res) => {
   try {
     await seedInitialData();
